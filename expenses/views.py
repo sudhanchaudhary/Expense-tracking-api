@@ -12,7 +12,6 @@ def category_list(request):
         categories = Category.objects.all()
         serializer = CategorySerializer(categories, many=True)
         return Response(serializer.data)
-
     serializer = CategorySerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     serializer.save()
