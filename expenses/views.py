@@ -10,6 +10,8 @@ from django.conf import settings
 from .models import Category, Expense
 from .serializers import CategorySerializer, ExpenseSerializer
 from .exchange_rates import convert_amount
+from .bot_alerts import check_budget_alert
+
 
 
 @api_view(["GET", "POST"])
@@ -29,44 +31,65 @@ def category_list(request):
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def expense_list(request):
+    """
+    GET: List all expenses for the logged-in user (with optional date filtering)
+         Query params: ?start_date=2026-06-01&end_date=2026-06-30
+    POST: Create a new expense for the logged-in user
+    """
+    
+    # GET: Retrieve expenses with optional filtering
     if request.method == "GET":
         expenses = Expense.objects.filter(user=request.user)
-
+        
         start_date = request.query_params.get("start_date")
         end_date = request.query_params.get("end_date")
-
+        
         if start_date:
             expenses = expenses.filter(date__gte=start_date)
         if end_date:
             expenses = expenses.filter(date__lte=end_date)
-
+        
         serializer = ExpenseSerializer(expenses, many=True)
         return Response(serializer.data)
-
+    
+    # POST: Create a new expense
     serializer = ExpenseSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    serializer.save(user=request.user)
+    expense = serializer.save(user=request.user)
+    
+    # ← ADD THIS: Check if expense triggers budget alert
+    check_budget_alert(expense.category, request.user)
+    
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 @api_view(["GET", "PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
 def expense_detail(request, pk):
+    """
+    GET: Retrieve a specific expense by ID
+    PUT: Update a specific expense
+    DELETE: Delete a specific expense
+    """
+    
     try:
         expense = Expense.objects.get(pk=pk, user=request.user)
     except Expense.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-
+    
     if request.method == "GET":
         serializer = ExpenseSerializer(expense)
         return Response(serializer.data)
-
+    
     if request.method == "PUT":
         serializer = ExpenseSerializer(expense, data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        expense = serializer.save()
 
+        check_budget_alert(expense.category, request.user)
+        
+        return Response(serializer.data)
+    
     if request.method == "DELETE":
         expense.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
