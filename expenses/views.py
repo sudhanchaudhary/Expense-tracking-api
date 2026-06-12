@@ -3,9 +3,13 @@ from rest_framework.decorators import api_view,permission_classes
 from rest_framework.response import Response
 from django.db.models import Sum
 from rest_framework.permissions import IsAuthenticated
+from datetime import datetime
+from decimal import Decimal
+from django.conf import settings
 
 from .models import Category, Expense
 from .serializers import CategorySerializer, ExpenseSerializer
+from .exchange_rates import convert_amount
 
 
 @api_view(["GET", "POST"])
@@ -15,6 +19,7 @@ def category_list(request):
         categories = Category.objects.filter(user=request.user)
         serializer = CategorySerializer(categories, many=True)
         return Response(serializer.data)
+
     serializer = CategorySerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     serializer.save(user=request.user)
@@ -29,6 +34,7 @@ def expense_list(request):
 
         start_date = request.query_params.get("start_date")
         end_date = request.query_params.get("end_date")
+
         if start_date:
             expenses = expenses.filter(date__gte=start_date)
         if end_date:
@@ -61,16 +67,67 @@ def expense_detail(request, pk):
         serializer.save()
         return Response(serializer.data)
 
-    expense.delete()
-    return Response(status=status.HTTP_204_NO_CONTENT)
+    if request.method == "DELETE":
+        expense.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def expense_summary(request):
-    summary = (
-        Expense.objects.filter(user=request.user).values("category__name")
-        .annotate(total=Sum("amount"))
+    base_currency = getattr(settings, "BASE_CURRENCY", "USD")
+
+    expenses = (
+        Expense.objects
+        .filter(user=request.user)
+        .select_related("category")
         .order_by("category__name")
     )
-    return Response(list(summary))
+
+    categories_dict = {}
+    for expense in expenses:
+        cat_name = expense.category.name
+        if cat_name not in categories_dict:
+            categories_dict[cat_name] = []
+        categories_dict[cat_name].append(expense)
+
+    summary = []
+    for cat_name, expenses_list in sorted(categories_dict.items()):
+        category_total = Decimal("0.00")
+        rate_info = None
+
+        for expense in expenses_list:
+            if expense.currency != base_currency:
+                try:
+                    conversion = convert_amount(
+                        expense.amount,
+                        expense.currency,
+                        base_currency
+                    )
+                    category_total += Decimal(conversion["converted_amount"])
+                    rate_info = {
+                        "rate": conversion["rate"],
+                        "date": conversion["date"]
+                    }
+                except Exception:
+                    continue
+            else:
+                category_total += expense.amount
+                if not rate_info:
+                    rate_info = {
+                        "rate": "1.00",
+                        "date": datetime.now().date().isoformat()
+                    }
+
+        if category_total > 0:
+            summary.append({
+                "category": cat_name,
+                "total": str(round(category_total, 2)),
+                "rate": rate_info["rate"] if rate_info else "1.00",
+                "as_of": rate_info["date"] if rate_info else datetime.now().date().isoformat()
+            })
+
+    return Response({
+        "base_currency": base_currency,
+        "categories": summary
+    })
