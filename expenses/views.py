@@ -6,6 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from datetime import datetime
 from decimal import Decimal
 from django.conf import settings
+from django.db.models import Q
+
 
 from .models import Category, Expense
 from .serializers import CategorySerializer, ExpenseSerializer
@@ -32,36 +34,65 @@ def category_list(request):
 @permission_classes([IsAuthenticated])
 def expense_list(request):
     """
-    GET: List all expenses for the logged-in user (with optional date filtering)
-         Query params: ?start_date=2026-06-01&end_date=2026-06-30
-    POST: Create a new expense for the logged-in user
-    """
+    GET: List all expenses with advanced filtering options
     
-    # GET: Retrieve expenses with optional filtering
+    Query Parameters (all optional):
+    - ?search=keyword          → Search in title and notes (case-insensitive)
+    - ?min_amount=10          → Minimum expense amount
+    - ?max_amount=100         → Maximum expense amount
+    - ?category=1             → Filter by category ID
+    - ?start_date=2026-06-01  → Start date (inclusive)
+    - ?end_date=2026-06-30    → End date (inclusive)
+    
+    Examples:
+    GET /api/expenses/?search=hotel
+    GET /api/expenses/?min_amount=50&max_amount=200
+    GET /api/expenses/?category=1&start_date=2026-06-01
+    GET /api/expenses/?search=restaurant&min_amount=20&max_amount=100&category=1
+    
+    POST: Create a new expense
+    """
     if request.method == "GET":
         expenses = Expense.objects.filter(user=request.user)
+        search = request.query_params.get("search")
+        if search:
+            expenses = expenses.filter(
+                Q(title__icontains=search) | Q(notes__icontains=search)
+            )
+            print(f"Filtered by search: '{search}'")
+        min_amount = request.query_params.get("min_amount")
+        max_amount = request.query_params.get("max_amount")
         
+        if min_amount:
+            expenses = expenses.filter(amount__gte=min_amount)
+            print(f"Filtered by min_amount: {min_amount}")
+        
+        if max_amount:
+            expenses = expenses.filter(amount__lte=max_amount)
+            print(f"Filtered by max_amount: {max_amount}")
+        category = request.query_params.get("category")
+        if category:
+            expenses = expenses.filter(category=category)
+            print(f"Filtered by category: {category}")
         start_date = request.query_params.get("start_date")
         end_date = request.query_params.get("end_date")
         
         if start_date:
             expenses = expenses.filter(date__gte=start_date)
+            print(f"Filtered by start_date: {start_date}")
+        
         if end_date:
             expenses = expenses.filter(date__lte=end_date)
-        
+            print(f"Filtered by end_date: {end_date}")
+        expenses = expenses.order_by("-date")
         serializer = ExpenseSerializer(expenses, many=True)
         return Response(serializer.data)
-    
-    # POST: Create a new expense
     serializer = ExpenseSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     expense = serializer.save(user=request.user)
-    
-    # ← ADD THIS: Check if expense triggers budget alert
     check_budget_alert(expense.category, request.user)
     
     return Response(serializer.data, status=status.HTTP_201_CREATED)
-
 
 @api_view(["GET", "PUT", "DELETE"])
 @permission_classes([IsAuthenticated])

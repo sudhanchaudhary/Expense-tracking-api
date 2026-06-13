@@ -293,6 +293,134 @@
           }
         ]
       }
+    },
+    {
+      "name": "Trigger Budget Alert",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Token {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Concert Ticket\",\n  \"amount\": \"250.00\",\n  \"category\": 1,\n  \"date\": \"2026-06-13\",\n  \"notes\": \"Should exceed monthly budget and trigger alert\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/expenses/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "expenses",
+            ""
+          ]
+        },
+        "description": "Creates an expense that exceeds the category monthly_limit and triggers the budget alert bot."
+      }
+    },
+    {
+      "name": "Search & Filtering",
+      "item": [
+        {
+          "name": "Search by Keyword (hotel)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/expenses/?search=hotel",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter by Min Amount",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/expenses/?min_amount=50",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter by Max Amount",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/expenses/?max_amount=100",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter by Amount Range (50-100)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/expenses/?min_amount=50&max_amount=100",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter by Category",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/expenses/?category=1",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter by Date Range",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/expenses/?start_date=2026-06-11&end_date=2026-06-12",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Combined: Search + Amount + Category",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/expenses/?search=hotel&min_amount=100&category=1",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{token}}"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
